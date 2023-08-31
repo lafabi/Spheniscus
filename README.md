@@ -1,2 +1,2 @@
 # Spheniscus
-This repository include all scripr used in Spheniscus analyses
+This repository include all script used in Spheniscus analyses
