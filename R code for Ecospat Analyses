@@ -1,0 +1,1192 @@
+
+setwd("D:/Desktop/Spheniscus")
+
+#save.image("D:/Desktop/Spheniscus/Spheniscus_project.RData")
+#load("D:/Desktop/Spheniscus/Spheniscus_project.RData")
+
+library("spocc")
+library("raster")
+library(rgdal) #load the library rgdal so that you can call functions from it
+library(maptools)
+library(ade4)
+library(rasterVis)
+library(dismo)
+library(ecospat)
+library(rgbif)
+library(readxl)
+
+pensp <-read.csv("Spheniscus.csv",header=TRUE)
+
+#####Spheniscus Species Occurrence Data from GBIF
+
+Sp<-read.csv("SpheniscusSpecies.csv",header=TRUE)
+
+sp1= Sp[1,]
+sp2= Sp[2,]
+sp3= Sp[3,]
+sp4= Sp[4,]
+
+for (i in 1:length(Sp[,1])) {
+  tryCatch({
+    sp<-as.character(Sp[i,1])
+    res <- occ(query = sp, from = 'gbif',limit=10000, has_coords=T)
+    locs<-occ2df(res)
+    locs2<-locs[,2:3]
+    locs2[locs2 == 0] <- NA
+    locs3<-locs2[complete.cases(locs2),]
+    locs4<-round(locs3, digits = 2)
+    locs5<-locs4[!duplicated(locs4), ]
+    write.csv(locs5, paste(Sp[i,], 'csv', sep = '.'))
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+
+SphenOcurr<-cbind(Sp,locs5)
+write.csv(SphenOcurr, "SpheniscusOcurrences.csv")
+
+require(raster) 
+require(ENMTools)
+require(corrplot)
+
+
+#####PAIRED SPECIES COMPARISONS 
+###CONDITIONS OF THE STUDY AREA
+current.list <- list.files(path="D:/Desktop/Spheniscus/Sea conditions", 
+                           pattern =".tif", full.names=TRUE)
+c.stack<- stack(current.list)
+
+studyAreaMeMa = extent(-90,-65,-60, 5)
+studyAreaMeHu = extent(-90,-65,-60, 5)
+studyAreaMeDe = extent(-90,-65,-60, 5)
+studyAreaMaHu = extent(-90,-65,-60, 5)
+studyAreaMaDe = extent(-90,-65,-60, 5)
+studyAreaHuDe = extent(-90,-65,-60, 5)
+
+SOAreaMeMa <- crop(c.stack, studyAreaMeMa)
+SOAreaMeHu <- crop(c.stack, studyAreaMeHu)
+SOAreaMeDe <- crop(c.stack, studyAreaMeDe)
+SOAreaMaHu <- crop(c.stack, studyAreaMaHu)
+SOAreaMaDe <- crop(c.stack, studyAreaMaDe)
+SOAreaHuDe <- crop(c.stack, studyAreaHuDe)
+
+studyAreaAme = extent(-95,-40,-60, 5)
+studyAreaAfr = extent(10, 35,-37, -12)
+
+SOAreaAme <- crop(c.stack, studyAreaAme)
+SOAreaAfr <- crop(c.stack, studyAreaAfr)
+
+plot(SOAreaAme)
+plot(SOAreaAfr)
+
+##dados
+predictors1 = SOAreaAme
+predictors2 = SOAreaAfr
+
+spMeData = read.csv(paste('D:/Desktop/Spheniscus/Spheniscus_mendiculusF.csv',sep=','),h=T); spMeData = spMeData[,3:4]; names(spMeData) = c('longitude','latitude')
+spMaData = read.csv(paste('D:/Desktop/Spheniscus/Spheniscus_magellanicusF.csv',sep=','),h=T); spMaData = spMaData[,3:4]; names(spMaData) = c('longitude','latitude')
+spHuData = read.csv(paste('D:/Desktop/Spheniscus/Spheniscus_humboldtiF.csv',sep=','),h=T); spHuData = spHuData[,3:4]; names(spHuData) = c('longitude','latitude')
+spDeData = read.csv(paste('D:/Desktop/Spheniscus/Spheniscus_demersusF.csv',sep=','),h=T); spDeData = spDeData[,3:4]; names(spDeData) = c('longitude','latitude')
+
+#plot(SOAreaAme)
+#plot(spMeData)
+
+#sp2Data <- crop(sp2Data, SOArea)
+
+##background points
+spMeBG = data.frame(dismo::randomPoints(predictors1[[1]], 1000)); names(spMeBG) = c('longitude','latitude')
+spMaBG = data.frame(dismo::randomPoints(predictors1[[1]], 1000)); names(spMaBG) = c('longitude','latitude')
+spHuBG = data.frame(dismo::randomPoints(predictors1[[1]], 1000)); names(spHuBG) = c('longitude','latitude')
+spDeBG = data.frame(dismo::randomPoints(predictors2[[1]], 1000)); names(spDeBG) = c('longitude','latitude')
+
+#plot(spMaBG)
+#plot(spMeDF)
+
+##data.frames
+spMeDF = data.frame(rbind(spMeData,spMeBG), pres=c(rep(1,nrow(spMeData)), rep(0,nrow(spMeBG)) ))
+spMaDF = data.frame(rbind(spMaData,spMaBG), pres=c(rep(1,nrow(spMaData)), rep(0,nrow(spMaBG)) ))
+spHuDF = data.frame(rbind(spHuData,spHuBG), pres=c(rep(1,nrow(spHuData)), rep(0,nrow(spHuBG)) ))
+spDeDF = data.frame(rbind(spDeData,spDeBG), pres=c(rep(1,nrow(spDeData)), rep(0,nrow(spDeBG)) ))
+
+##data.frame com variaveis ambientais
+spMeDFenv = extract(predictors1, spMeDF[,c('longitude','latitude')], na.rm=TRUE); spMeDF = data.frame(spMeDF, spMeDFenv)
+spMaDFenv = extract(predictors1, spMaDF[,c('longitude','latitude')], na.rm=TRUE); spMaDF = data.frame(spMaDF, spMaDFenv)
+spHuDFenv = extract(predictors1, spHuDF[,c('longitude','latitude')], na.rm=TRUE); spHuDF = data.frame(spHuDF, spHuDFenv)
+spDeDFenv = extract(predictors2, spDeDF[,c('longitude','latitude')], na.rm=TRUE); spDeDF = data.frame(spDeDF, spDeDFenv)
+
+##limpando NAs
+spMeDF = spMeDF[complete.cases(spMeDF),]
+spMaDF = spMaDF[complete.cases(spMaDF),]
+spHuDF = spHuDF[complete.cases(spHuDF),]
+spDeDF = spDeDF[complete.cases(spDeDF),]
+
+
+
+## Analise de nicho
+
+##The PCA is calibrated on all the sites of the study area
+pca.envMeMa <- dudi.pca(rbind(spMeDF,spMaDF)[,c(4:ncol(spMeDF))],scannf=F,nf=2)
+pca.envMeHu <- dudi.pca(rbind(spMeDF,spHuDF)[,c(4:ncol(spMeDF))],scannf=F,nf=2)
+pca.envMeDe <- dudi.pca(rbind(spMeDF,spDeDF)[,c(4:ncol(spMeDF))],scannf=F,nf=2)
+pca.envMaHu <- dudi.pca(rbind(spMaDF,spHuDF)[,c(4:ncol(spMaDF))],scannf=F,nf=2)
+pca.envMaDe <- dudi.pca(rbind(spMaDF,spDeDF)[,c(4:ncol(spMaDF))],scannf=F,nf=2)
+pca.envHuDe <- dudi.pca(rbind(spHuDF,spDeDF)[,c(4:ncol(spHuDF))],scannf=F,nf=2)
+
+##PCA scores for the whole study area
+scores.globclimMeMa <- pca.envMeMa$li
+scores.globclimMeHu <- pca.envMeHu$li
+scores.globclimMeDe <- pca.envMeDe$li
+scores.globclimMaHu <- pca.envMaHu$li
+scores.globclimMaDe <- pca.envMaDe$li
+scores.globclimHuDe <- pca.envHuDe$li
+
+##PCA scores for the species clade distribution
+scores.sp.spMeMa <- suprow(pca.envMeMa,spMeDF[which(spMeDF[,'pres']==1),c(4:ncol(spMeDF))])$li
+scores.sp.spMaMe <- suprow(pca.envMeMa,spMaDF[which(spMaDF[,'pres']==1),c(4:ncol(spMaDF))])$li
+scores.sp.spMeHu <- suprow(pca.envMeHu,spMeDF[which(spMeDF[,'pres']==1),c(4:ncol(spMeDF))])$li
+scores.sp.spHuMe <- suprow(pca.envMeHu,spHuDF[which(spHuDF[,'pres']==1),c(4:ncol(spHuDF))])$li
+scores.sp.spMeDe <- suprow(pca.envMeDe,spMeDF[which(spMeDF[,'pres']==1),c(4:ncol(spMeDF))])$li
+scores.sp.spDeMe <- suprow(pca.envMeDe,spDeDF[which(spDeDF[,'pres']==1),c(4:ncol(spDeDF))])$li
+scores.sp.spMaHu <- suprow(pca.envMaHu,spMaDF[which(spMaDF[,'pres']==1),c(4:ncol(spMaDF))])$li
+scores.sp.spHuMa <- suprow(pca.envMaHu,spHuDF[which(spHuDF[,'pres']==1),c(4:ncol(spHuDF))])$li
+scores.sp.spMaDe <- suprow(pca.envMaDe,spMaDF[which(spMaDF[,'pres']==1),c(4:ncol(spMaDF))])$li
+scores.sp.spDeMa <- suprow(pca.envMaDe,spDeDF[which(spDeDF[,'pres']==1),c(4:ncol(spDeDF))])$li
+scores.sp.spHuDe <- suprow(pca.envHuDe,spHuDF[which(spHuDF[,'pres']==1),c(4:ncol(spHuDF))])$li
+scores.sp.spDeHu <- suprow(pca.envHuDe,spDeDF[which(spDeDF[,'pres']==1),c(4:ncol(spDeDF))])$li
+
+##PCA scores for the whole clade study area
+scores.clim.spMeMa <-suprow(pca.envMeMa,spMeDF[,c(4:ncol(spMeDF))])$li
+scores.clim.spMaMe <-suprow(pca.envMeMa,spMaDF[,c(4:ncol(spMaDF))])$li
+
+scores.clim.spMeHu <-suprow(pca.envMeHu,spMeDF[,c(4:ncol(spMeDF))])$li
+scores.clim.spHuMe <-suprow(pca.envMeHu,spHuDF[,c(4:ncol(spHuDF))])$li
+
+scores.clim.spMeDe <-suprow(pca.envMeDe,spMeDF[,c(4:ncol(spMeDF))])$li
+scores.clim.spDeMe <-suprow(pca.envMeDe,spMeDF[,c(4:ncol(spDeDF))])$li
+
+scores.clim.spMaHu <-suprow(pca.envMaHu,spMaDF[,c(4:ncol(spMaDF))])$li
+scores.clim.spHuMa <-suprow(pca.envMaHu,spHuDF[,c(4:ncol(spHuDF))])$li
+
+scores.clim.spMaDe <-suprow(pca.envMaDe,spMaDF[,c(4:ncol(spMaDF))])$li
+scores.clim.spDeMa <-suprow(pca.envMaDe,spDeDF[,c(4:ncol(spDeDF))])$li
+
+scores.clim.spHuDe <-suprow(pca.envHuDe,spHuDF[,c(4:ncol(spHuDF))])$li
+scores.clim.spDeHu <-suprow(pca.envHuDe,spDeDF[,c(4:ncol(spDeDF))])$li
+
+##gridding the native niche
+grid.clim.spMeMa <-ecospat.grid.clim.dyn(glob=scores.globclimMeMa, glob1=scores.clim.spMeMa, sp=scores.sp.spMeMa, R=100, th.sp=0)
+grid.clim.spMaMe <-ecospat.grid.clim.dyn(glob=scores.globclimMeMa, glob1=scores.clim.spMaMe, sp=scores.sp.spMaMe, R=100, th.sp=0)
+
+grid.clim.spMeHu <-ecospat.grid.clim.dyn(glob=scores.globclimMeHu, glob1=scores.clim.spMeHu, sp=scores.sp.spMeHu, R=100, th.sp=0)
+grid.clim.spHuMe <-ecospat.grid.clim.dyn(glob=scores.globclimMeHu, glob1=scores.clim.spHuMe, sp=scores.sp.spHuMe, R=100, th.sp=0)
+
+grid.clim.spMeDe <-ecospat.grid.clim.dyn(glob=scores.globclimMeDe, glob1=scores.clim.spMeDe, sp=scores.sp.spMeDe, R=100, th.sp=0)
+grid.clim.spDeMe <-ecospat.grid.clim.dyn(glob=scores.globclimMeDe, glob1=scores.clim.spDeMe, sp=scores.sp.spDeMe, R=100, th.sp=0)
+
+grid.clim.spMaHu <-ecospat.grid.clim.dyn(glob=scores.globclimMaHu, glob1=scores.clim.spMaHu, sp=scores.sp.spMaHu, R=100, th.sp=0)
+grid.clim.spHuMa <-ecospat.grid.clim.dyn(glob=scores.globclimMaHu, glob1=scores.clim.spHuMa, sp=scores.sp.spHuMa, R=100, th.sp=0)
+
+grid.clim.spMaDe <-ecospat.grid.clim.dyn(glob=scores.globclimMaDe, glob1=scores.clim.spMaDe, sp=scores.sp.spMaDe, R=100, th.sp=0)
+grid.clim.spDeMa <-ecospat.grid.clim.dyn(glob=scores.globclimMaDe, glob1=scores.clim.spDeMa, sp=scores.sp.spDeMa, R=100, th.sp=0)
+
+grid.clim.spHuDe <-ecospat.grid.clim.dyn(glob=scores.globclimHuDe, glob1=scores.clim.spHuDe, sp=scores.sp.spHuDe, R=100, th.sp=0)
+grid.clim.spDeHu <-ecospat.grid.clim.dyn(glob=scores.globclimHuDe, glob1=scores.clim.spDeHu, sp=scores.sp.spDeHu, R=100, th.sp=0)
+
+D.overlapMeMa<-ecospat.niche.overlap(grid.clim.spMeMa,grid.clim.spMaMe,cor=TRUE)$D
+D.overlapMeHu<-ecospat.niche.overlap(grid.clim.spMeHu,grid.clim.spHuMe,cor=TRUE)$D
+D.overlapMeDe<-ecospat.niche.overlap(grid.clim.spMeDe,grid.clim.spDeMe,cor=TRUE)$D
+D.overlapMaHu<-ecospat.niche.overlap(grid.clim.spMaHu,grid.clim.spHuMa,cor=TRUE)$D
+D.overlapMaDe<-ecospat.niche.overlap(grid.clim.spMaDe,grid.clim.spDeMa,cor=TRUE)$D
+D.overlapHuDe<-ecospat.niche.overlap(grid.clim.spHuDe,grid.clim.spDeHu,cor=TRUE)$D
+
+mat_overlap <- matrix(ncol=4, nrow=4)
+colnames(mat_overlap) <- c('Gapalagos','Magellanic', 'Humboldt', 'African')
+rownames(mat_overlap) <- c('Gapalagos','Magellanic', 'Humboldt', 'African')
+mat_overlap <- as.data.frame(mat_overlap)
+mat_overlap <- tibble::rownames_to_column(mat_overlap)
+
+
+mat_overlap[1,3] <-D.overlapMeMa
+mat_overlap[1,4] <-D.overlapMeHu
+mat_overlap[1,5] <-D.overlapMeDe
+mat_overlap[2,4] <-D.overlapMaHu
+mat_overlap[2,5] <-D.overlapMaDe
+mat_overlap[3,5] <-D.overlapHuDe
+
+write_xlsx(as.data.frame(mat_overlap), "Results/Niche_Overlap_All_Sps.xlsx")
+
+#plot
+ecospat.plot.niche.dyn(grid.clim.spMeMa, quant=0.25)
+ecospat.plot.niche.dyn(grid.clim.spMaHu, quant=0.25)
+#?ecospat.plot.niche.dyn
+
+dev.off()
+par(mfrow=c(2,3))
+
+pdf("Niche overlap Galapagos vs Magellanic.pdf")
+ecospat.plot.niche.dyn(grid.clim.spMeMa, grid.clim.spMaMe, quant=0.90, interest=2,
+                       title= "Niche Overlap", col.unf = "#70D423", col.stab="grey", col.exp = "#FFDC00")
+dev.off()
+pdf("Niche overlap Galapagos vs Demersus.pdf")
+ecospat.plot.niche.dyn(grid.clim.spMeDe, grid.clim.spDeMe, quant=0.90, interest=2,
+                       title= "Niche Overlap", col.unf = "#70D423", col.stab="grey", col.exp = "#00FFFF")
+dev.off()
+pdf("Niche overlap Galapagos vs Humboldt.pdf")
+ecospat.plot.niche.dyn(grid.clim.spMeHu, grid.clim.spHuMe, quant=0.90, interest=2,
+                       title= "Niche Overlap", col.unf = "#70D423", col.stab="grey", col.exp = "#FA41CA")
+dev.off()
+pdf("Niche overlap Magellanic vs Humboldt.pdf")
+ecospat.plot.niche.dyn(grid.clim.spMaHu, grid.clim.spHuMa, quant=0.90, interest=2,
+                       title= "Niche Overlap", col.unf = "#FFDC00", col.stab="grey", col.exp = "#FA41CA")
+dev.off()
+pdf("Niche overlap Magellanic vs Demersus.pdf")
+ecospat.plot.niche.dyn(grid.clim.spMaDe, grid.clim.spDeMa, quant=0.90, interest=2,
+                       title= "Niche Overlap", col.unf = "#FFDC00", col.stab="grey", col.exp = "#00FFFF")
+dev.off()
+pdf("Niche overlap Humboldt vs Demersus.pdf")
+ecospat.plot.niche.dyn(grid.clim.spHuDe, grid.clim.spDeHu, quant=0.90, interest=2,
+                       title= "Niche Overlap", col.unf = "#FA41CA", col.stab="grey", col.exp = "#00FFFF")
+dev.off()
+
+
+#Gal?pagos: "#70D423"
+#Humboldt: "#FA41CA"
+#Magellanic: "#FFDC00"
+#African: "#00FFFF"
+
+
+ecospat.plot.niche.dyn(grid.clim.sp1, grid.clim.sp2, quant=0.25, interest=2,
+                       title= "Niche Overlap", name.axis1=scores.globclim$Axis1,
+                       name.axis2=scores.globclim$Axis2)
+
+
+eq.test<-ecospat.niche.equivalency.test(grid.clim.spMaHu,grid.clim.spHuMa,rep=40, 
+                                        intersection=0.1, overlap.alternative="higher", expansion.alternative="lower", 
+                                        stability.alternative="higher", unfilling.alternative="lower")
+
+ecospat.plot.overlap.test(eq.test,"D","Equivalency")
+
+ ## 1 a 2, mayor solapamiento que 2 aleatorios
+sim.test<-ecospat.niche.similarity.test(grid.clim.sp1,grid.clim.sp2,rep=40, overlap.alternative="higher", 
+                                        expansion.alternative="lower", stability.alternative="higher", unfilling.alternative="lower", 
+                                        intersection=0.1, rand.type=2)
+
+ecospat.plot.overlap.test(sim.test,"D","Similarity")
+
+##2 a 1 mayor solapamiento que 1 aleatorios
+sim.test<-ecospat.niche.similarity.test(grid.clim.sp2,grid.clim.sp1,rep=40, overlap.alternative="higher", 
+                                        expansion.alternative="lower", stability.alternative="higher", unfilling.alternative="lower", 
+                                        intersection=0.1, rand.type=2)
+
+ecospat.plot.overlap.test(sim.test,"D","Similarity")
+
+####Plotthenichedynamicsalongonegradient(heretemperature)withecospat.plot.niche.dyn()
+#environmental overlap per variable
+
+grid.clim.t.MeMa<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spMaDF)[,6]), 
+                                        glob1=as.data.frame(spMeDF[,6]), sp=as.data.frame(spMeDF[which(spMeDF[,3]==1),6]), R=1000,th.sp=0) 
+grid.clim.t.MaMe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spMaDF)[,6]), 
+                                        glob1=as.data.frame(spMaDF[,6]), sp=as.data.frame(spMaDF[which(spMaDF[,3]==1),6]), R=1000,th.sp=0) 
+
+grid.clim.t.MeHu<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spHuDF)[,6]), 
+                                        glob1=as.data.frame(spMeDF[,6]), sp=as.data.frame(spMeDF[which(spMeDF[,3]==1),6]), R=1000,th.sp=0) 
+grid.clim.t.HuMe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spHuDF)[,6]), 
+                                        glob1=as.data.frame(spHuDF[,6]), sp=as.data.frame(spHuDF[which(spHuDF[,3]==1),6]), R=1000,th.sp=0)
+
+grid.clim.t.MeDe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spDeDF)[,6]), 
+                                       glob1=as.data.frame(spMeDF[,6]), sp=as.data.frame(spMeDF[which(spMeDF[,3]==1),6]), R=1000,th.sp=0) 
+grid.clim.t.DeMe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spDeDF)[,6]), 
+                                       glob1=as.data.frame(spDeDF[,6]), sp=as.data.frame(spDeDF[which(spDeDF[,3]==1),6]), R=1000,th.sp=0) 
+
+grid.clim.t.MaHu<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMaDF,spHuDF)[,6]), 
+                                        glob1=as.data.frame(spMaDF[,6]), sp=as.data.frame(spMaDF[which(spMaDF[,3]==1),6]), R=1000,th.sp=0) 
+grid.clim.t.HuMa<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMaDF,spHuDF)[,6]), 
+                                        glob1=as.data.frame(spHuDF[,6]), sp=as.data.frame(spHuDF[which(spHuDF[,3]==1),6]), R=1000,th.sp=0) 
+
+grid.clim.t.MaDe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMaDF,spDeDF)[,6]), 
+                                        glob1=as.data.frame(spMaDF[,6]), sp=as.data.frame(spMaDF[which(spMaDF[,3]==1),6]), R=1000,th.sp=0) 
+grid.clim.t.DeMa<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMaDF,spDeDF)[,6]), 
+                                        glob1=as.data.frame(spDeDF[,6]), sp=as.data.frame(spDeDF[which(spDeDF[,3]==1),6]), R=1000,th.sp=0)
+
+grid.clim.t.HuDe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spHuDF,spDeDF)[,6]), 
+                                        glob1=as.data.frame(spHuDF[,6]), sp=as.data.frame(spHuDF[which(spHuDF[,3]==1),6]), R=1000,th.sp=0) 
+grid.clim.t.DeHu<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spHuDF,spDeDF)[,6]), 
+                                        glob1=as.data.frame(spDeDF[,6]), sp=as.data.frame(spDeDF[which(spDeDF[,3]==1),6]), R=1000,th.sp=0)
+
+
+t.dynMeMa<-ecospat.niche.dyn.index(grid.clim.t.MeMa,grid.clim.t.MaMe, intersection=0.1) 
+t.dynMeHu<-ecospat.niche.dyn.index(grid.clim.t.MeHu,grid.clim.t.HuMe, intersection=0.1) 
+t.dynMeDe<-ecospat.niche.dyn.index(grid.clim.t.MeDe,grid.clim.t.DeMe, intersection=0.1) 
+t.dynMaHu<-ecospat.niche.dyn.index(grid.clim.t.MaHu,grid.clim.t.HuMa, intersection=0.1) 
+t.dynMaDe<-ecospat.niche.dyn.index(grid.clim.t.MaDe,grid.clim.t.DeMa, intersection=0.1) 
+t.dynHuDe<-ecospat.niche.dyn.index(grid.clim.t.DeHu,grid.clim.t.HuDe, intersection=0.1)
+
+mat_t = matrix(nrow = 6, ncol = 3)
+colnames(mat_t) <- c('Temp_Unfilling','Temp_Stability','Temp_Expansion')
+rownames(mat_t) <- c('MeMa','MeHu','MaHu', 'HuDe', 'MaDe', 'MeDe')
+tMeMaOverlap <- as.data.frame(t.dynMeMa$dynamic.index.w) 
+tMeHuOverlap <- as.data.frame(t.dynMeHu$dynamic.index.w) 
+tMaHuOverlap <- as.data.frame(t.dynMaHu$dynamic.index.w) 
+tHuDeOverlap <- as.data.frame(t.dynHuDe$dynamic.index.w) 
+tMaDeOverlap <- as.data.frame(t.dynMaDe$dynamic.index.w) 
+tMeDeOverlap <- as.data.frame(t.dynMeDe$dynamic.index.w) 
+
+mat_t[1,1:3] <- tMeMaOverlap[1:3,1] 
+mat_t[2,1:3] <- tMeHuOverlap[1:3,1] 
+mat_t[3,1:3] <- tMaHuOverlap[1:3,1] 
+mat_t[4,1:3] <- tHuDeOverlap[1:3,1] 
+mat_t[5,1:3] <- tMaDeOverlap[1:3,1] 
+mat_t[6,1:3] <- tMeDeOverlap[1:3,1] 
+
+mat2_t <- round(mat_t, digits = 3)
+colnames(mat2_t) <- c('Temp_Unfilling','Temp_Stability','Temp_Expansion')
+rownames(mat2_t) <- c('Galap Magall','Galap Humb','Magall Humb', 'Humb Cape', 'Magall Cape', 'Galap Cape')
+
+mat3_t <- as.data.frame(mat2_t)
+mat4_t <- tibble::rownames_to_column(mat3_t)
+colnames(mat4_t) <- c('Species Pair', 'Temp_Expansion','Temp_Stability','Temp_Unfilling')
+
+write_xlsx(as.data.frame(mat4_t), "Results/Temp_Overlap_All_Sps.xlsx")
+
+t.dynMeHu$dynamic.index.w 
+t.dynMeDe$dynamic.index.w
+t.dynMaHu$dynamic.index.w
+t.dynMaDe$dynamic.index.w 
+t.dynHuDe$dynamic.index.w
+
+ecospat.plot.contrib(contrib=pca.envMeMa$co, eigen=pca.envMeMa$eig)
+
+dev.off()
+#par(mfrow=c(2,3))
+
+pdf("temp_overlap_galapagos_vs_magellanic.pdf")
+ecospat.plot.niche.dyn(grid.clim.t.MeMa,grid.clim.t.MaMe, quant=0, mtext(t.dynMeMa$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#70D423", colZ2 = "#FFDC00",
+                       col.unf = "#70D423", col.exp = "#FFDC00", name.axis1="Sea surface temperature",
+                       transparency = 40) 
+dev.off()
+pdf("temp_overlap_humboldt_vs_magellanic.pdf")
+ecospat.plot.niche.dyn(grid.clim.t.HuMa,grid.clim.t.MaHu, quant=0, mtext(t.dynMaHu$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#FA41CA", colZ2 = "#FFDC00",
+                       col.unf = "#FA41CA", col.exp = "#FFDC00", name.axis1="Sea surface temperature",
+                       transparency = 40) 
+dev.off()
+pdf("temp_overlap_humboldt_vs_demersus.pdf")
+ecospat.plot.niche.dyn(grid.clim.t.HuDe,grid.clim.t.DeHu, quant=0, mtext(t.dynHuDe$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#FA41CA", colZ2 = "#00FFFF",
+                       col.unf = "#FA41CA", col.exp = "#00FFFF", name.axis1="Sea surface temperature",
+                       transparency = 40) 
+dev.off()
+pdf("temp_overlap_galapagos_vs_humboldt.pdf")
+ecospat.plot.niche.dyn(grid.clim.t.MeHu,grid.clim.t.HuMe, quant=0, mtext(t.dynDeMe$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#70D423", colZ2 = "#FA41CA",
+                       col.unf = "#70D423", col.exp = "#FA41CA", name.axis1="Sea surface temperature",
+                       transparency = 40) 
+dev.off()
+pdf("temp_overlap_magellanic_vs_demersus.pdf")
+ecospat.plot.niche.dyn(grid.clim.t.MaDe,grid.clim.t.DeMa, quant=0, mtext(t.dynMaDe$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#FFDC00", colZ2 = "#00FFFF",
+                       col.unf = "#FFDC00", col.exp = "#00FFFF", name.axis1="Sea surface temperature",
+                       transparency = 40) 
+dev.off()
+pdf("temp_overlap_galapagos_vs_demersus.pdf")
+ecospat.plot.niche.dyn(grid.clim.t.MeDe,grid.clim.t.DeMe, quant=0, mtext(t.dynMeDe$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#70D423", colZ2 = "#00FFFF",
+                       col.unf = "#70D423", col.exp = "#00FFFF", name.axis1="Sea surface temperature",
+                       transparency = 40) 
+dev.off()
+
+#Salinity
+
+grid.clim.sa.MeMa<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spMaDF)[,5]), 
+                                        glob1=as.data.frame(spMeDF[,5]), sp=as.data.frame(spMeDF[which(spMeDF[,3]==1),5]), R=1000,th.sp=0) 
+grid.clim.sa.MaMe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spMaDF)[,5]), 
+                                        glob1=as.data.frame(spMaDF[,5]), sp=as.data.frame(spMaDF[which(spMaDF[,3]==1),5]), R=1000,th.sp=0) 
+
+grid.clim.sa.MeHu<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spHuDF)[,5]), 
+                                        glob1=as.data.frame(spMeDF[,5]), sp=as.data.frame(spMeDF[which(spMeDF[,3]==1),5]), R=1000,th.sp=0) 
+grid.clim.sa.HuMe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spHuDF)[,5]), 
+                                        glob1=as.data.frame(spHuDF[,5]), sp=as.data.frame(spHuDF[which(spHuDF[,3]==1),5]), R=1000,th.sp=0)
+
+grid.clim.sa.MeDe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spDeDF)[,5]), 
+                                        glob1=as.data.frame(spMeDF[,5]), sp=as.data.frame(spMeDF[which(spMeDF[,3]==1),5]), R=1000,th.sp=0) 
+grid.clim.sa.DeMe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spDeDF)[,5]), 
+                                        glob1=as.data.frame(spDeDF[,5]), sp=as.data.frame(spDeDF[which(spDeDF[,3]==1),5]), R=1000,th.sp=0) 
+
+grid.clim.sa.MaHu<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMaDF,spHuDF)[,5]), 
+                                        glob1=as.data.frame(spMaDF[,5]), sp=as.data.frame(spMaDF[which(spMaDF[,3]==1),5]), R=1000,th.sp=0) 
+grid.clim.sa.HuMa<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMaDF,spHuDF)[,5]), 
+                                        glob1=as.data.frame(spHuDF[,5]), sp=as.data.frame(spHuDF[which(spHuDF[,3]==1),5]), R=1000,th.sp=0) 
+
+grid.clim.sa.MaDe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMaDF,spDeDF)[,5]), 
+                                        glob1=as.data.frame(spMaDF[,5]), sp=as.data.frame(spMaDF[which(spMaDF[,3]==1),5]), R=1000,th.sp=0) 
+grid.clim.sa.DeMa<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMaDF,spDeDF)[,5]), 
+                                        glob1=as.data.frame(spDeDF[,5]), sp=as.data.frame(spDeDF[which(spDeDF[,3]==1),5]), R=1000,th.sp=0)
+
+grid.clim.sa.HuDe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spHuDF,spDeDF)[,5]), 
+                                        glob1=as.data.frame(spHuDF[,5]), sp=as.data.frame(spHuDF[which(spHuDF[,3]==1),5]), R=1000,th.sp=0) 
+grid.clim.sa.DeHu<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spHuDF,spDeDF)[,5]), 
+                                        glob1=as.data.frame(spDeDF[,5]), sp=as.data.frame(spDeDF[which(spDeDF[,3]==1),5]), R=1000,th.sp=0)
+
+
+sa.dynMeMa<-ecospat.niche.dyn.index(grid.clim.sa.MeMa,grid.clim.sa.MeMa, intersection=0.1) 
+sa.dynMeHu<-ecospat.niche.dyn.index(grid.clim.sa.MeHu,grid.clim.sa.HuMe, intersection=0.1) 
+sa.dynMeDe<-ecospat.niche.dyn.index(grid.clim.sa.MeDe,grid.clim.sa.DeMe, intersection=0.1) 
+sa.dynMaHu<-ecospat.niche.dyn.index(grid.clim.sa.MaHu,grid.clim.sa.HuMa, intersection=0.1) 
+sa.dynMaDe<-ecospat.niche.dyn.index(grid.clim.sa.MaDe,grid.clim.sa.DeMa, intersection=0.1) 
+sa.dynHuDe<-ecospat.niche.dyn.index(grid.clim.sa.DeHu,grid.clim.sa.HuDe, intersection=0.1)
+
+
+mat_sa = matrix(, nrow = 6, ncol = 3)
+colnames(mat_sa) <- c('Sal_Unfilling','Sal_Stability','Sal_Expansion')
+rownames(mat_sa) <- c('MeMa','MeHu','MeDe', 'MaHu', 'MaDe', 'HuDe')
+saMeMaOverlap <- as.data.frame(sa.dynMeMa$dynamic.index.w) 
+saMeHuOverlap <- as.data.frame(sa.dynMeHu$dynamic.index.w) 
+saMaHuOverlap <- as.data.frame(sa.dynMaHu$dynamic.index.w) 
+saHuDeOverlap <- as.data.frame(sa.dynHuDe$dynamic.index.w) 
+saMaDeOverlap <- as.data.frame(sa.dynMaDe$dynamic.index.w) 
+saMeDeOverlap <- as.data.frame(sa.dynMeDe$dynamic.index.w) 
+
+mat_sa[1,1:3] <- saMeMaOverlap[1:3,1] 
+mat_sa[2,1:3] <- saMeHuOverlap[1:3,1] 
+mat_sa[3,1:3] <- saMaHuOverlap[1:3,1] 
+mat_sa[4,1:3] <- saHuDeOverlap[1:3,1] 
+mat_sa[5,1:3] <- saMaDeOverlap[1:3,1] 
+mat_sa[6,1:3] <- saMeDeOverlap[1:3,1] 
+
+mat2_sa <- round(mat_sa, digits = 3)
+colnames(mat2_sa) <- c('Sal_Unfilling','Sal_Stability','Sal_Expansion')
+rownames(mat2_sa) <- c('Galap Magall','Galap Humb','Galap African', 'Magall Humb', 'Magall African', 'Humb African')
+
+mat3_sa <- as.data.frame(mat2_sa)
+mat4_sa <- tibble::rownames_to_column(mat3_sa)
+colnames(mat4_sa) <- c('Species Pair', 'Sal_Expansion','Sal_Stability','Sal_Unfilling')
+
+write_xlsx(as.data.frame(mat4_sa), "Results/Sal_Overlap_All_Sps.xlsx")
+
+pdf("salinity_overlap_galapagos_vs_magellanic.pdf")
+ecospat.plot.niche.dyn(grid.clim.sa.MeMa,grid.clim.sa.MaMe, quant=0, mtext(t.dynMeMa$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#70D423", colZ2 = "#FFDC00",
+                       col.unf = "#70D423", col.exp = "#FFDC00", name.axis1="Sea surface salinity",
+                       transparency = 40) 
+dev.off()
+pdf("salinity_overlap_humboldt_vs_magellanic.pdf")
+ecospat.plot.niche.dyn(grid.clim.sa.HuMa,grid.clim.sa.MaHu, quant=0, mtext(t.dynMaHu$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#FA41CA", colZ2 = "#FFDC00",
+                       col.unf = "#FA41CA", col.exp = "#FFDC00", name.axis1="Sea surface salinity",
+                       transparency = 40) 
+dev.off()
+pdf("salinity_overlap_humboldt_vs_demersus.pdf")
+ecospat.plot.niche.dyn(grid.clim.sa.HuDe,grid.clim.sa.DeHu, quant=0, mtext(t.dynHuDe$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#FA41CA", colZ2 = "#00FFFF",
+                       col.unf = "#FA41CA", col.exp = "#00FFFF", name.axis1="Sea surface salinity",
+                       transparency = 40) 
+dev.off()
+pdf("salinity_overlap_galapagos_vs_humboldt.pdf")
+ecospat.plot.niche.dyn(grid.clim.sa.MeHu,grid.clim.sa.HuMe, quant=0, mtext(t.dynDeMe$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#70D423", colZ2 = "#FA41CA",
+                       col.unf = "#FFDC00", col.exp = "#FA41CA", name.axis1="Sea surface salinity",
+                       transparency = 40) 
+dev.off()
+pdf("salinity_overlap_magellanic_vs_demersus.pdf")
+ecospat.plot.niche.dyn(grid.clim.sa.MaDe,grid.clim.sa.DeMa, quant=0, mtext(t.dynMaDe$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#FFDC00", colZ2 = "#00FFFF",
+                       col.unf = "#FFDC00", col.exp = "#00FFFF", name.axis1="Sea surface salinity",
+                       transparency = 40) 
+dev.off()
+pdf("salinity_overlap_galapagos_vs_demersus.pdf")
+ecospat.plot.niche.dyn(grid.clim.sa.MeDe,grid.clim.sa.DeMe, quant=0, mtext(t.dynMeDe$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#70D423", colZ2 = "#00FFFF",
+                       col.unf = "#70D423", col.exp = "#00FFFF", name.axis1="Sea surface salinity",
+                       transparency = 40) 
+dev.off()
+
+#Chlorophyll
+
+grid.clim.ch.MeMa<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spMaDF)[,4]), 
+                                         glob1=as.data.frame(spMeDF[,4]), sp=as.data.frame(spMeDF[which(spMeDF[,3]==1),4]), R=1000,th.sp=0) 
+grid.clim.ch.MaMe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spMaDF)[,4]), 
+                                         glob1=as.data.frame(spMaDF[,4]), sp=as.data.frame(spMaDF[which(spMaDF[,3]==1),4]), R=1000,th.sp=0) 
+
+grid.clim.ch.MeHu<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spHuDF)[,4]), 
+                                         glob1=as.data.frame(spMeDF[,4]), sp=as.data.frame(spMeDF[which(spMeDF[,3]==1),4]), R=1000,th.sp=0) 
+grid.clim.ch.HuMe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spHuDF)[,4]), 
+                                         glob1=as.data.frame(spHuDF[,4]), sp=as.data.frame(spHuDF[which(spHuDF[,3]==1),4]), R=1000,th.sp=0)
+
+grid.clim.ch.MeDe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spDeDF)[,4]), 
+                                         glob1=as.data.frame(spMeDF[,4]), sp=as.data.frame(spMeDF[which(spMeDF[,3]==1),4]), R=1000,th.sp=0) 
+grid.clim.ch.DeMe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMeDF,spDeDF)[,4]), 
+                                         glob1=as.data.frame(spDeDF[,4]), sp=as.data.frame(spDeDF[which(spDeDF[,3]==1),4]), R=1000,th.sp=0) 
+
+grid.clim.ch.MaHu<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMaDF,spHuDF)[,4]), 
+                                         glob1=as.data.frame(spMaDF[,4]), sp=as.data.frame(spMaDF[which(spMaDF[,3]==1),4]), R=1000,th.sp=0) 
+grid.clim.ch.HuMa<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMaDF,spHuDF)[,4]), 
+                                         glob1=as.data.frame(spHuDF[,4]), sp=as.data.frame(spHuDF[which(spHuDF[,3]==1),4]), R=1000,th.sp=0) 
+
+grid.clim.ch.MaDe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMaDF,spDeDF)[,4]), 
+                                         glob1=as.data.frame(spMaDF[,4]), sp=as.data.frame(spMaDF[which(spMaDF[,3]==1),4]), R=1000,th.sp=0) 
+grid.clim.ch.DeMa<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spMaDF,spDeDF)[,4]), 
+                                         glob1=as.data.frame(spDeDF[,4]), sp=as.data.frame(spDeDF[which(spDeDF[,3]==1),4]), R=1000,th.sp=0)
+
+grid.clim.ch.HuDe<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spHuDF,spDeDF)[,4]), 
+                                         glob1=as.data.frame(spHuDF[,4]), sp=as.data.frame(spHuDF[which(spHuDF[,3]==1),4]), R=1000,th.sp=0) 
+grid.clim.ch.DeHu<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(spHuDF,spDeDF)[,4]), 
+                                         glob1=as.data.frame(spDeDF[,4]), sp=as.data.frame(spDeDF[which(spDeDF[,3]==1),4]), R=1000,th.sp=0)
+
+
+ch.dynMeMa<-ecospat.niche.dyn.index(grid.clim.ch.MeHu,grid.clim.ch.HuMe, intersection=0.1) 
+ch.dynMeHu<-ecospat.niche.dyn.index(grid.clim.ch.MeHu,grid.clim.ch.HuMa, intersection=0.1) 
+ch.dynMeDe<-ecospat.niche.dyn.index(grid.clim.ch.MeDe,grid.clim.ch.DeMe, intersection=0.1) 
+ch.dynMaHu<-ecospat.niche.dyn.index(grid.clim.ch.MaHu,grid.clim.ch.HuMa, intersection=0.1) 
+ch.dynMaDe<-ecospat.niche.dyn.index(grid.clim.ch.MaDe,grid.clim.ch.DeMa, intersection=0.1) 
+ch.dynHuDe<-ecospat.niche.dyn.index(grid.clim.ch.DeHu,grid.clim.ch.HuDe, intersection=0.1)
+
+
+mat_ch = matrix(, nrow = 6, ncol = 3)
+colnames(mat_ch) <- c('chl_Unfilling','chl_Stability','chl_Expansion')
+rownames(mat_ch) <- c('MeMa','MeHu','MaHu', 'HuDe', 'MaDe', 'MeDe')
+chMeMaOverlap <- as.data.frame(ch.dynMeMa$dynamic.index.w) 
+chMeHuOverlap <- as.data.frame(ch.dynMeHu$dynamic.index.w) 
+chMaHuOverlap <- as.data.frame(ch.dynMaHu$dynamic.index.w) 
+chHuDeOverlap <- as.data.frame(ch.dynHuDe$dynamic.index.w) 
+chMaDeOverlap <- as.data.frame(ch.dynMaDe$dynamic.index.w) 
+chMeDeOverlap <- as.data.frame(ch.dynMeDe$dynamic.index.w) 
+
+mat_ch[1,1:3] <- chMeMaOverlap[1:3,1] 
+mat_ch[2,1:3] <- chMeHuOverlap[1:3,1] 
+mat_ch[3,1:3] <- chMaHuOverlap[1:3,1] 
+mat_ch[4,1:3] <- chHuDeOverlap[1:3,1] 
+mat_ch[5,1:3] <- chMaDeOverlap[1:3,1] 
+mat_ch[6,1:3] <- chMeDeOverlap[1:3,1] 
+
+mat2_ch <- round(mat_ch, digits = 3)
+colnames(mat2_ch) <- c('chl_Unfilling','chl_Stability','chl_Expansion')
+rownames(mat2_ch) <- c('Galap Magall','Galap Humb','Magall Humb', 'Humb Cape', 'Magall Cape', 'Galap Cape')
+
+mat3_ch <- as.data.frame(mat2_ch)
+mat4_ch <- tibble::rownames_to_column(mat3_ch)
+colnames(mat4_ch) <- c('Species Pair', 'chl_Expansion','chl_Stability','chl_Unfilling')
+
+write_xlsx(as.data.frame(mat4_ch), "Results/chl_Overlap_All_Sps.xlsx")
+
+pdf("Chlorophyll_overlap_galapagos_vs_magellanic.pdf")
+ecospat.plot.niche.dyn(grid.clim.ch.MeMa,grid.clim.ch.MaMe, quant=0, mtext(t.dynMeMa$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#70D423", colZ2 = "#FFDC00",
+                       col.unf = "#70D423", col.exp = "#FFDC00", name.axis1="Sea surface Chlorophyll",
+                       transparency = 40) 
+dev.off()
+pdf("Chlorophyll_overlap_humboldt_vs_magellanic.pdf")
+ecospat.plot.niche.dyn(grid.clim.ch.HuMa,grid.clim.ch.MaHu, quant=0, mtext(t.dynMaHu$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#FA41CA", colZ2 = "#FFDC00",
+                       col.unf = "#FA41CA", col.exp = "#FFDC00", name.axis1="Sea surface Chlorophyll",
+                       transparency = 40) 
+dev.off()
+pdf("Chlorophyll_overlap_humboldt_vs_demersus.pdf")
+ecospat.plot.niche.dyn(grid.clim.ch.HuDe,grid.clim.ch.DeHu, quant=0, mtext(t.dynHuDe$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#FA41CA", colZ2 = "#00FFFF",
+                       col.unf = "#FA41CA", col.exp = "#00FFFF", name.axis1="Sea surface Chlorophyll",
+                       transparency = 40) 
+dev.off()
+pdf("Chlorophyll_overlap_galapagos_vs_humboldt.pdf")
+ecospat.plot.niche.dyn(grid.clim.ch.MeHu,grid.clim.ch.HuMe, quant=0, mtext(t.dynDeMe$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#70D423", colZ2 = "#FA41CA",
+                       col.unf = "#70D423", col.exp = "#FA41CA", name.axis1="Sea surface Chlorophyll",
+                       transparency = 40) 
+dev.off()
+pdf("Chlorophyll_overlap_magellanic_vs_demersus.pdf")
+ecospat.plot.niche.dyn(grid.clim.ch.MaDe,grid.clim.ch.DeMa, quant=0, mtext(t.dynMaDe$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#FFDC00", colZ2 = "#00FFFF",
+                       col.unf = "#FFDC00", col.exp = "#00FFFF", name.axis1="Sea surface Chlorophyll",
+                       transparency = 40) 
+dev.off()
+pdf("Chlorophyll_overlap_galapagos_vs_demersus.pdf")
+ecospat.plot.niche.dyn(grid.clim.ch.MeDe,grid.clim.ch.DeMe, quant=0, mtext(t.dynMeDe$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#FFDC00", colZ2 = "#00FFFF",
+                       col.unf = "#FFDC00", col.exp = "#00FFFF", name.axis1="Sea surface Chlorophyll",
+                       transparency = 40) 
+dev.off()
+
+
+
+###plot results spatially
+
+
+geoGrid <- expand.grid(longitude =
+                         seq(-90, -65, length.out = 500),
+                       latitude =
+                         seq(-60, 5, length.out = 500))
+
+earlyGeoGrid <- ecospat.grid.clim.dyn(geoGrid, geoGrid,
+                                      coordinates(sp1Data))
+
+#sp2Data = sp2Data[complete.cases(sp2Data),]
+
+lateGeoGrid <- ecospat.grid.clim.dyn(geoGrid, geoGrid,
+                                     coordinates(sp2Data))
+
+ecospat.plot.niche.dyn(earlyGeoGrid, lateGeoGrid, quant = 0.25)
+
+
+data(wrld_simpl)
+plot(wrld_simpl, add = TRUE)
+
+
+geoGrid <- expand.grid(longitude =
+                         seq(-95, 35, length.out = 500),
+                       latitude =
+                         seq(-60, 5, length.out = 500))
+
+dev.off()
+MeGeoGrid <- ecospat.grid.clim.dyn(geoGrid, geoGrid,
+                                      coordinates(spMeData))
+MaGeoGrid <- ecospat.grid.clim.dyn(geoGrid, geoGrid,
+                                     coordinates(spMaData))
+HuGeoGrid <- ecospat.grid.clim.dyn(geoGrid, geoGrid,
+                                   coordinates(spHuData))
+DEGeoGrid <- ecospat.grid.clim.dyn(geoGrid, geoGrid,
+                                   coordinates(spDeData))
+dev.off()
+par(mfrow=c(2,3))
+ecospat.plot.niche.dyn(MeGeoGrid, MaGeoGrid, quant = 0.25)
+plot(wrld_simpl, add = TRUE)
+ecospat.plot.niche.dyn(MaGeoGrid, HuGeoGrid, quant = 0.25)
+plot(wrld_simpl, add = TRUE)
+ecospat.plot.niche.dyn(MeGeoGrid, HuGeoGrid, quant = 0.25)
+plot(wrld_simpl, add = TRUE)
+ecospat.plot.niche.dyn(MaGeoGrid, DEGeoGrid, quant = 0.25)
+plot(wrld_simpl, add = TRUE)
+ecospat.plot.niche.dyn(HuGeoGrid, DEGeoGrid, quant = 0.25)
+plot(wrld_simpl, add = TRUE)
+ecospat.plot.niche.dyn(MeGeoGrid, DEGeoGrid, quant = 0.25)
+plot(wrld_simpl, add = TRUE)
+
+
+data(wrld_simpl)
+plot(wrld_simpl, add = TRUE)
+
+#####SPHENISCUS MENDICULUS
+###CONDITIONS OF THE STUDY AREA
+current.list <- list.files(path="D:/Desktop/Spheniscus/Sea conditions", 
+                           pattern =".tif", full.names=TRUE)
+c.stack<- stack(current.list)
+
+studyArea = extent(-93,-88,-3,3)
+SOArea <- crop(c.stack, studyArea)
+
+plot(SOArea)
+
+
+##dados
+predictors = SOArea
+
+sp1Data = read.csv(paste('D:/Desktop/Spheniscus/s_mend_isab.txt',sep=','),h=T); sp1Data = sp1Data[,3:4]; names(sp1Data) = c('lon','lat')
+sp2Data = read.csv(paste('D:/Desktop/Spheniscus/s_mend_santi.txt',sep=','),h=T); sp2Data = sp2Data[,3:4]; names(sp2Data) = c('lon','lat')
+
+#sp2Data <- crop(sp2Data, SOArea)
+
+##background points
+sp1BG = data.frame(dismo::randomPoints(predictors[[1]], 1000)); names(sp1BG) = c('lon','lat')
+sp2BG = data.frame(dismo::randomPoints(predictors[[1]], 1000)); names(sp2BG) = c('lon','lat')
+
+
+##data.frames
+sp1DF = data.frame(rbind(sp1Data,sp1BG), pres=c(rep(1,nrow(sp1Data)), rep(0,nrow(sp1BG)) ))
+sp2DF = data.frame(rbind(sp2Data,sp2BG), pres=c(rep(1,nrow(sp2Data)), rep(0,nrow(sp2BG)) ))
+
+
+##data.frame com variaveis ambientais
+sp1DFenv = extract(predictors, sp1DF[,c('lon','lat')], na.rm=TRUE); sp1DF = data.frame(sp1DF, sp1DFenv)
+sp2DFenv = extract(predictors, sp2DF[,c('lon','lat')], na.rm=TRUE); sp2DF = data.frame(sp2DF, sp2DFenv)
+
+
+##limpando NAs
+sp1DF = sp1DF[complete.cases(sp1DF),]
+sp2DF = sp2DF[complete.cases(sp2DF),]
+
+
+## Analise de nicho
+
+##The PCA is calibrated on all the sites of the study area
+pca.env <- dudi.pca(rbind(sp1DF,sp2DF)[,c(4:ncol(sp1DF))],scannf=F,nf=2)
+
+##PCA scores for the whole study area
+scores.globclim <- pca.env$li
+
+##PCA scores for the species clade distribution
+scores.sp.sp1 <- suprow(pca.env,sp1DF[which(sp1DF[,'pres']==1),c(4:ncol(sp1DF))])$li
+scores.sp.sp2 <- suprow(pca.env,sp2DF[which(sp2DF[,'pres']==1),c(4:ncol(sp2DF))])$li
+
+
+##PCA scores for the whole clade study area
+scores.clim.sp1 <-suprow(pca.env,sp1DF[,c(4:ncol(sp1DF))])$li
+scores.clim.sp2 <-suprow(pca.env,sp2DF[,c(4:ncol(sp2DF))])$li
+
+
+##gridding the native niche
+grid.clim.sp1 <-ecospat.grid.clim.dyn(glob=scores.globclim, glob1=scores.clim.sp1, sp=scores.sp.sp1, R=100, th.sp=0)
+grid.clim.sp2 <-ecospat.grid.clim.dyn(glob=scores.globclim, glob1=scores.clim.sp2, sp=scores.sp.sp2, R=100, th.sp=0)
+
+
+D.overlap<-ecospat.niche.overlap(grid.clim.sp1,grid.clim.sp2,cor=TRUE)$D
+
+#plot
+ecospat.plot.niche.dyn(grid.clim.sp1, quant=0.25)
+ecospat.plot.niche.dyn(grid.clim.sp2, quant=0.25)
+?ecospat.plot.niche.dyn
+
+ecospat.plot.niche.dyn(grid.clim.sp1, grid.clim.sp2, quant=0.95, interest=1,
+                       title= "Niche Overlap 0.05 subpobl Galapagos", name.axis1="Axis1 Isabel=green Santiago=red",
+                       name.axis2="Axis2")
+
+#eq.test<-ecospat.niche.equivalency.test(grid.clim.sp1,grid.clim.sp2,rep=20, 
+intersection=0.1, overlap.alternative="higher", expansion.alternative="lower", 
+stability.alternative="higher", unfilling.alternative="lower")
+
+#ecospat.plot.overlap.test(eq.test,"D","Equivalency")
+
+## 1 a 2, mayor solapamiento que 2 aleatorios
+#sim.test<-ecospat.niche.similarity.test(grid.clim.sp1,grid.clim.sp2,rep=20, overlap.alternative="higher", 
+expansion.alternative="lower", stability.alternative="higher", unfilling.alternative="lower", 
+intersection=0.1, rand.type=2)
+
+#ecospat.plot.overlap.test(sim.test,"D","Similarity")
+
+##2 a 1 mayor solapamiento que 1 aleatorios
+#sim.test<-ecospat.niche.similarity.test(grid.clim.sp2,grid.clim.sp1,rep=20, overlap.alternative="higher", 
+#                                       expansion.alternative="lower", stability.alternative="higher", unfilling.alternative="lower", 
+#                                      intersection=0.1, rand.type=2)
+
+#ecospat.plot.overlap.test(sim.test,"D","Similarity")
+
+####Plotthenichedynamicsalongonegradient(heretemperature)withecospat.plot.niche.dyn()
+#gridding the first niche 
+grid.clim.t.Me1<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,6]), 
+                                       glob1=as.data.frame(sp1DF[,6]), 
+                                       sp=as.data.frame(sp1DF[which(sp1DF[,3]==1),6]), R=1000,th.sp=0) 
+grid.clim.t.Me2<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,6]), 
+                                       glob1=as.data.frame(sp2DF[,6]), 
+                                       sp=as.data.frame(sp2DF[which(sp2DF[,3]==1),6]), R=1000,th.sp=0) 
+
+
+grid.clim.sa.Me1<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,5]), 
+                                        glob1=as.data.frame(sp1DF[,5]), 
+                                        sp=as.data.frame(sp1DF[which(sp1DF[,3]==1),5]), R=1000,th.sp=0) 
+grid.clim.sa.Me2<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,5]), 
+                                        glob1=as.data.frame(sp2DF[,5]), 
+                                        sp=as.data.frame(sp2DF[which(sp2DF[,3]==1),5]), R=1000,th.sp=0) 
+
+grid.clim.ch.Me1<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,4]), 
+                                        glob1=as.data.frame(sp1DF[,4]), 
+                                        sp=as.data.frame(sp1DF[which(sp1DF[,3]==1),4]), R=1000,th.sp=0) 
+grid.clim.ch.Me2<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,4]), 
+                                        glob1=as.data.frame(sp2DF[,4]), 
+                                        sp=as.data.frame(sp2DF[which(sp2DF[,3]==1),4]), R=1000,th.sp=0) 
+
+
+
+#environmental overlap per variable
+t.dyn<-ecospat.niche.dyn.index(grid.clim.t.Me1,grid.clim.t.Me2, intersection=0.1)
+sa.dyn<-ecospat.niche.dyn.index(grid.clim.sa.Me1,grid.clim.sa.Me2, intersection=0.1)
+ch.dyn<-ecospat.niche.dyn.index(grid.clim.ch.Me1,grid.clim.ch.Me2, intersection=0.1)
+
+
+pdf("Galapagos_populations_temp_overlap.pdf")
+ecospat.plot.niche.dyn(grid.clim.t.Me1,grid.clim.t.Me2, quant=0, mtext(t.dyn$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#dark green", colZ2 = "light green",
+                       col.unf = "dark green", col.stab = "dark grey", col.exp = "light green", name.axis1=
+                         "Sea surface temperature
+                       darkgreen=isabella, lightgreen=santiago, unfill:0, stabil:1, expan:0",
+                       transparency = 20) 
+dev.off()
+
+pdf("Galapagos_populations_salin_overlap.pdf")
+ecospat.plot.niche.dyn(grid.clim.sa.Me1,grid.clim.sa.Me2, quant=0, mtext(t.dyn$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#dark green", colZ2 = "light green",
+                       col.unf = "dark green", col.stab = "dark grey", col.exp = "light green", name.axis1=
+                         "Sea surface salinity
+                       darkgreen=isabella, lightgreen=santiago, unfill:0.385, stabil:0.997, expan:0.003",
+                       transparency = 20) 
+dev.off()
+
+pdf("Galapagos_populations_chloroph_overlap.pdf")
+ecospat.plot.niche.dyn(grid.clim.ch.Me1,grid.clim.ch.Me2, quant=0, mtext(t.dyn$dynamic.index.w, side=3, outer=TRUE),  
+                       interest=1, title = "Niche Overlap", colZ1 = "#dark green", colZ2 = "light green",
+                       col.unf = "dark green", col.stab = "dark grey", col.exp = "light green", name.axis1=
+                         "Sea surface chlorophill
+                       darkgreen=isabella, lightgreen=santiago, unfill:0.518, stabil:1.000, expan:0.000",
+                       transparency = 20) 
+dev.off()
+
+
+
+
+###plot results spatially
+
+
+geoGrid <- expand.grid(longitude =
+                         seq(-93, -88, length.out = 500),
+                       latitude =
+                         seq(-3, 3, length.out = 500))
+
+earlyGeoGrid <- ecospat.grid.clim.dyn(geoGrid, geoGrid,
+                                      coordinates(sp1Data))
+
+#sp2Data = sp2Data[complete.cases(sp2Data),]
+
+lateGeoGrid <- ecospat.grid.clim.dyn(geoGrid, geoGrid,
+                                     coordinates(sp2Data))
+
+ecospat.plot.niche.dyn(earlyGeoGrid, lateGeoGrid, quant = 0.25)
+
+
+data(wrld_simpl)
+plot(wrld_simpl, add = TRUE)
+
+
+#####SPHENISCUS HUMBOLDTI
+###CONDITIONS OF THE STUDY AREA
+current.list <- list.files(path="D:/Desktop/Spheniscus/Sea conditions", 
+                           pattern =".tif", full.names=TRUE)
+c.stack<- stack(current.list)
+
+studyArea = extent(-90,-65,-60, 5)
+SOArea <- crop(c.stack, studyArea)
+
+plot(SOArea)
+
+
+##dados
+predictors = SOArea
+
+sp1Data = read.csv(paste('D:/Desktop/Spheniscus/humb_nor.txt',sep=','),h=T); sp1Data = sp1Data[,3:4]; names(sp1Data) = c('lon','lat')
+sp2Data = read.csv(paste('D:/Desktop/Spheniscus/humb_sur.txt',sep=','),h=T); sp2Data = sp2Data[,3:4]; names(sp2Data) = c('lon','lat')
+
+#sp2Data <- crop(sp2Data, SOArea)
+
+##background points
+sp1BG = data.frame(dismo::randomPoints(predictors[[1]], 1000)); names(sp1BG) = c('lon','lat')
+sp2BG = data.frame(dismo::randomPoints(predictors[[1]], 1000)); names(sp2BG) = c('lon','lat')
+
+
+##data.frames
+sp1DF = data.frame(rbind(sp1Data,sp1BG), pres=c(rep(1,nrow(sp1Data)), rep(0,nrow(sp1BG)) ))
+sp2DF = data.frame(rbind(sp2Data,sp2BG), pres=c(rep(1,nrow(sp2Data)), rep(0,nrow(sp2BG)) ))
+
+
+##data.frame com variaveis ambientais
+sp1DFenv = extract(predictors, sp1DF[,c('lon','lat')], na.rm=TRUE); sp1DF = data.frame(sp1DF, sp1DFenv)
+sp2DFenv = extract(predictors, sp2DF[,c('lon','lat')], na.rm=TRUE); sp2DF = data.frame(sp2DF, sp2DFenv)
+
+
+##limpando NAs
+sp1DF = sp1DF[complete.cases(sp1DF),]
+sp2DF = sp2DF[complete.cases(sp2DF),]
+
+
+## Analise de nicho
+
+##The PCA is calibrated on all the sites of the study area
+pca.env <- dudi.pca(rbind(sp1DF,sp2DF)[,c(4:ncol(sp1DF))],scannf=F,nf=2)
+
+##PCA scores for the whole study area
+scores.globclim <- pca.env$li
+
+##PCA scores for the species clade distribution
+scores.sp.sp1 <- suprow(pca.env,sp1DF[which(sp1DF[,'pres']==1),c(4:ncol(sp1DF))])$li
+scores.sp.sp2 <- suprow(pca.env,sp2DF[which(sp2DF[,'pres']==1),c(4:ncol(sp2DF))])$li
+
+
+##PCA scores for the whole clade study area
+scores.clim.sp1 <-suprow(pca.env,sp1DF[,c(4:ncol(sp1DF))])$li
+scores.clim.sp2 <-suprow(pca.env,sp2DF[,c(4:ncol(sp2DF))])$li
+
+
+##gridding the native niche
+grid.clim.sp1 <-ecospat.grid.clim.dyn(glob=scores.globclim, glob1=scores.clim.sp1, sp=scores.sp.sp1, R=100, th.sp=0)
+grid.clim.sp2 <-ecospat.grid.clim.dyn(glob=scores.globclim, glob1=scores.clim.sp2, sp=scores.sp.sp2, R=100, th.sp=0)
+
+
+D.overlap<-ecospat.niche.overlap(grid.clim.sp1,grid.clim.sp2,cor=TRUE)$D
+
+#plot
+ecospat.plot.niche.dyn(grid.clim.sp1, quant=0.25)
+ecospat.plot.niche.dyn(grid.clim.sp2, quant=0.25)
+#?ecospat.plot.niche.dyn
+
+ecospat.plot.niche.dyn(grid.clim.sp1, grid.clim.sp2, quant=0.95, interest = 2,
+                       col.unf = "dark red", col.stab = "dark grey", col.exp = "red",
+                       title= "Niche Overlap 0.09 Humboldt subpopulations", name.axis1= "Axis 1 humbnorth:lightred humbsouth:darkred
+                       unfill:0, stabil:1, expan:0",
+                       name.axis2= "Axis 1", transparency =40)
+
+#points(grid.clim.sp1)
+
+#eq.test<-ecospat.niche.equivalency.test(grid.clim.sp1,grid.clim.sp2,rep=40, 
+intersection=0.1, overlap.alternative="higher", expansion.alternative="lower", 
+stability.alternative="higher", unfilling.alternative="lower")
+
+#ecospat.plot.overlap.test(eq.test,"D","Equivalency")
+
+## 1 a 2, mayor solapamiento que 2 aleatorios
+#sim.test<-ecospat.niche.similarity.test(grid.clim.sp1,grid.clim.sp2,rep=40, overlap.alternative="higher", 
+expansion.alternative="lower", stability.alternative="higher", unfilling.alternative="lower", 
+intersection=0.1, rand.type=2)
+
+#ecospat.plot.overlap.test(sim.test,"D","Similarity")
+
+##2 a 1 mayor solapamiento que 1 aleatorios
+#sim.test<-ecospat.niche.similarity.test(grid.clim.sp2,grid.clim.sp1,rep=40, overlap.alternative="higher", 
+expansion.alternative="lower", stability.alternative="higher", unfilling.alternative="lower", 
+intersection=0.1, rand.type=2)
+
+#ecospat.plot.overlap.test(sim.test,"D","Similarity")
+
+####Plotthenichedynamicsalongonegradient(heretemperature)withecospat.plot.niche.dyn()
+#gridding the first niche 
+grid.clim.t.Hu1<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,6]), 
+                                       glob1=as.data.frame(sp1DF[,6]), sp=as.data.frame(sp1DF[which(sp1DF[,3]==1),6]), R=1000,th.sp=0) 
+grid.clim.t.Hu2<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,6]), 
+                                       glob1=as.data.frame(sp2DF[,6]), sp=as.data.frame(sp2DF[which(sp2DF[,3]==1),6]), R=1000,th.sp=0) 
+
+grid.clim.sa.Hu1<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,5]), 
+                                        glob1=as.data.frame(sp1DF[,5]), sp=as.data.frame(sp1DF[which(sp1DF[,3]==1),5]), R=1000,th.sp=0) 
+grid.clim.sa.Hu2<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,5]), 
+                                        glob1=as.data.frame(sp2DF[,5]), sp=as.data.frame(sp2DF[which(sp2DF[,3]==1),5]), R=1000,th.sp=0) 
+
+
+grid.clim.ch.Hu1<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,4]), 
+                                        glob1=as.data.frame(sp1DF[,4]), sp=as.data.frame(sp1DF[which(sp1DF[,3]==1),4]), R=1000,th.sp=0) 
+grid.clim.ch.Hu2<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,4]), 
+                                        glob1=as.data.frame(sp2DF[,4]), sp=as.data.frame(sp2DF[which(sp2DF[,3]==1),4]), R=1000,th.sp=0) 
+
+
+#environmental overlap per variable
+t.dyn<-ecospat.niche.dyn.index(grid.clim.t.Hu1,grid.clim.t.Hu2, intersection=0.1) 
+ch.dyn<-ecospat.niche.dyn.index(grid.clim.ch.Hu1,grid.clim.ch.Hu2, intersection=0.1) 
+sa.dyn<-ecospat.niche.dyn.index(grid.clim.sa.Hu1,grid.clim.sa.Hu2, intersection=0.1) 
+
+ecospat.plot.niche.dyn(grid.clim.t.Hu1,grid.clim.t.Hu2,quant=0, interest=2,title="NicheOverlap", 
+                       col.unf = "dark red", col.stab = "dark grey", col.exp = "pink", colZ1 = "red",
+                       name.axis1="Average temperature humbnorth:darkred, humbsouth:lightred
+                       unfill:0.994, stabil:0.005, expan:0.995", transparency=20)
+
+ecospat.plot.niche.dyn(grid.clim.sa.Hu1,grid.clim.sa.Hu2,quant=0, interest=2,title="NicheOverlap", 
+                       col.unf = "dark red", col.stab = "dark grey", col.exp = "pink", colZ1 = "red",
+                       name.axis1="Average salinity humbnorth:darkred, humbsouth:lightred
+                       unfill:0.782, stabil:0.242, expan:0.757", transparency=20)
+
+ecospat.plot.niche.dyn(grid.clim.ch.Hu1,grid.clim.ch.Hu2,quant=0, interest=2,title="NicheOverlap", 
+                       col.unf = "dark red", col.stab = "dark grey", col.exp = "pink", colZ1 = "red",
+                       name.axis1="Average chlorophill humbnorth:darkred, humbsouth:lightred
+                       unfill:0.050, stabil:1.000, expan:0.000", transparency=20)
+
+
+
+histogram(sp1DF$Present.Surface.Temperature.Mean)
+histogram(sp2DF$Present.Surface.Temperature.Mean)
+
+plot(sp1DF)
+
+###plot results spatially
+
+
+geoGrid <- expand.grid(longitude =
+                         seq(-90, -65, length.out = 500),
+                       latitude =
+                         seq(-60, 5, length.out = 500))
+
+earlyGeoGrid <- ecospat.grid.clim.dyn(geoGrid, geoGrid,
+                                      coordinates(sp1Data))
+
+#sp2Data = sp2Data[complete.cases(sp2Data),]
+
+lateGeoGrid <- ecospat.grid.clim.dyn(geoGrid, geoGrid,
+                                     coordinates(sp2Data))
+
+ecospat.plot.niche.dyn(earlyGeoGrid, lateGeoGrid, quant = 0.25)
+
+
+data(wrld_simpl)
+plot(wrld_simpl, add = TRUE)
+
+
+
+#####SPHENISCUS MAGELLANICUS
+###CONDITIONS OF THE STUDY AREA
+current.list <- list.files(path="D:/Desktop/Spheniscus/Sea conditions", 
+                           pattern =".tif", full.names=TRUE)
+c.stack<- stack(current.list)
+
+studyArea = extent(-77,-39,-60, -20)
+SOArea <- crop(c.stack, studyArea)
+
+plot(SOArea)
+
+
+##dados
+predictors = SOArea
+
+sp1Data = read.csv(paste('D:/Desktop/Spheniscus/mag_pacific.txt',sep=','),h=T); sp1Data = sp1Data[,3:4]; names(sp1Data) = c('lon','lat')
+sp2Data = read.csv(paste('D:/Desktop/Spheniscus/mag_atlantic.txt',sep=','),h=T); sp2Data = sp2Data[,3:4]; names(sp2Data) = c('lon','lat')
+
+#plot(sp2Data)
+
+#sp2Data <- crop(sp2Data, SOArea)
+
+##background points
+sp1BG = data.frame(dismo::randomPoints(predictors[[1]], 1000)); names(sp1BG) = c('lon','lat')
+sp2BG = data.frame(dismo::randomPoints(predictors[[1]], 1000)); names(sp2BG) = c('lon','lat')
+
+
+##data.frames
+sp1DF = data.frame(rbind(sp1Data,sp1BG), pres=c(rep(1,nrow(sp1Data)), rep(0,nrow(sp1BG)) ))
+sp2DF = data.frame(rbind(sp2Data,sp2BG), pres=c(rep(1,nrow(sp2Data)), rep(0,nrow(sp2BG)) ))
+
+
+##data.frame com variaveis ambientais
+sp1DFenv = extract(predictors, sp1DF[,c('lon','lat')], na.rm=TRUE); sp1DF = data.frame(sp1DF, sp1DFenv)
+sp2DFenv = extract(predictors, sp2DF[,c('lon','lat')], na.rm=TRUE); sp2DF = data.frame(sp2DF, sp2DFenv)
+
+
+##limpando NAs
+sp1DF = sp1DF[complete.cases(sp1DF),]
+sp2DF = sp2DF[complete.cases(sp2DF),]
+
+
+## Analise de nicho
+
+##The PCA is calibrated on all the sites of the study area
+pca.env <- dudi.pca(rbind(sp1DF,sp2DF)[,c(4:ncol(sp1DF))],scannf=F,nf=2)
+
+##PCA scores for the whole study area
+scores.globclim <- pca.env$li
+
+##PCA scores for the species clade distribution
+scores.sp.sp1 <- suprow(pca.env,sp1DF[which(sp1DF[,'pres']==1),c(4:ncol(sp1DF))])$li
+scores.sp.sp2 <- suprow(pca.env,sp2DF[which(sp2DF[,'pres']==1),c(4:ncol(sp2DF))])$li
+
+
+##PCA scores for the whole clade study area
+scores.clim.sp1 <-suprow(pca.env,sp1DF[,c(4:ncol(sp1DF))])$li
+scores.clim.sp2 <-suprow(pca.env,sp2DF[,c(4:ncol(sp2DF))])$li
+
+
+##gridding the native niche
+grid.clim.sp1 <-ecospat.grid.clim.dyn(glob=scores.globclim, glob1=scores.clim.sp1, sp=scores.sp.sp1, R=100, th.sp=0)
+grid.clim.sp2 <-ecospat.grid.clim.dyn(glob=scores.globclim, glob1=scores.clim.sp2, sp=scores.sp.sp2, R=100, th.sp=0)
+
+
+D.overlap<-ecospat.niche.overlap(grid.clim.sp1,grid.clim.sp2,cor=TRUE)$D
+
+#plot
+ecospat.plot.niche.dyn(grid.clim.sp1, quant=0.25)
+ecospat.plot.niche.dyn(grid.clim.sp2, quant=0.25)
+#?ecospat.plot.niche.dyn
+
+pdf("Magellanic supopulation Niche overlap.pdf")
+ecospat.plot.niche.dyn(grid.clim.sp1, grid.clim.sp2, quant=0.95, interest = 2,
+                       col.unf = "orange", col.stab = "dark grey", col.exp = "yellow",
+                       title= "Niche Overlap 0.46 Magellanic subpopulations", name.axis1= "Axis 1 pacific:orange atlantic:yellow
+                       unfill:0, stabil:1, expan:0",
+                       name.axis2= "Axis 1", transparency =40)
+dev.off()
+#points(grid.clim.sp1)
+
+#eq.test<-ecospat.niche.equivalency.test(grid.clim.sp1,grid.clim.sp2,rep=40, 
+intersection=0.1, overlap.alternative="higher", expansion.alternative="lower", 
+stability.alternative="higher", unfilling.alternative="lower")
+
+#ecospat.plot.overlap.test(eq.test,"D","Equivalency")
+
+## 1 a 2, mayor solapamiento que 2 aleatorios
+#sim.test<-ecospat.niche.similarity.test(grid.clim.sp1,grid.clim.sp2,rep=40, overlap.alternative="higher", 
+expansion.alternative="lower", stability.alternative="higher", unfilling.alternative="lower", 
+intersection=0.1, rand.type=2)
+
+#ecospat.plot.overlap.test(sim.test,"D","Similarity")
+
+##2 a 1 mayor solapamiento que 1 aleatorios
+#sim.test<-ecospat.niche.similarity.test(grid.clim.sp2,grid.clim.sp1,rep=40, overlap.alternative="higher", 
+expansion.alternative="lower", stability.alternative="higher", unfilling.alternative="lower", 
+intersection=0.1, rand.type=2)
+
+#ecospat.plot.overlap.test(sim.test,"D","Similarity")
+
+####Plotthenichedynamicsalongonegradient(heretemperature)withecospat.plot.niche.dyn()
+#gridding the first niche 
+grid.clim.t.Ma1<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,6]), 
+                                       glob1=as.data.frame(sp1DF[,6]), sp=as.data.frame(sp1DF[which(sp1DF[,3]==1),6]), R=1000,th.sp=0) 
+grid.clim.t.Ma2<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,6]), 
+                                       glob1=as.data.frame(sp2DF[,6]), sp=as.data.frame(sp2DF[which(sp2DF[,3]==1),6]), R=1000,th.sp=0) 
+
+grid.clim.sa.Ma1<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,5]), 
+                                        glob1=as.data.frame(sp1DF[,5]), sp=as.data.frame(sp1DF[which(sp1DF[,3]==1),5]), R=1000,th.sp=0) 
+grid.clim.sa.Ma2<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,5]), 
+                                        glob1=as.data.frame(sp2DF[,5]), sp=as.data.frame(sp2DF[which(sp2DF[,3]==1),5]), R=1000,th.sp=0) 
+
+
+grid.clim.ch.Ma1<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,4]), 
+                                        glob1=as.data.frame(sp1DF[,4]), sp=as.data.frame(sp1DF[which(sp1DF[,3]==1),4]), R=1000,th.sp=0) 
+grid.clim.ch.Ma2<-ecospat.grid.clim.dyn(glob=as.data.frame(rbind(sp1DF,sp2DF)[,4]), 
+                                        glob1=as.data.frame(sp2DF[,4]), sp=as.data.frame(sp2DF[which(sp2DF[,3]==1),4]), R=1000,th.sp=0) 
+
+
+#environmental overlap per variable
+matmag <-matrix(ncol=4,nrow=4)
+  
+te.dyn<-ecospat.niche.dyn.index(grid.clim.t.Ma1,grid.clim.t.Ma2, intersection=0.1) 
+ch.dyn<-ecospat.niche.dyn.index(grid.clim.ch.Ma1,grid.clim.ch.Ma2, intersection=0.1) 
+sa.dyn<-ecospat.niche.dyn.index(grid.clim.sa.Ma1,grid.clim.sa.Ma2, intersection=0.1) 
+
+matmag[1,1:4] <- c("Magellan Pacific vs Atlantic", "expansion", "stability", "unfilling")
+matmag[2:4,1] <- c("Temp overlap", "Salinity overlap", "Chlorophyll overlap")
+matmag[2,2:4] <- te.dyn$dynamic.index.w
+matmag[3,2:4] <- ch.dyn$dynamic.index.w
+matmag[4,2:4] <- sa.dyn$dynamic.index.w
+
+write_xlsx(as.data.frame(matmag), "Magellanic subpopulations each variable overlap.xlsx")
+
+pdf("Magellanic supopulation temp overlap.pdf")
+ecospat.plot.niche.dyn(grid.clim.t.Ma1,grid.clim.t.Ma2,quant=0, interest=2,title="NicheOverlap", 
+                       col.unf = "orange", col.stab = "dark grey", col.exp = "yellow", colZ1 = "red",
+                       name.axis1="Average temperature magellanics
+                       orange:pacific, yellow:atlantic", transparency=20)
+dev.off()
+pdf("Magellanic supopulation salinity overlap.pdf")
+ecospat.plot.niche.dyn(grid.clim.sa.Ma1,grid.clim.sa.Ma2,quant=0, interest=2,title="NicheOverlap", 
+                       col.unf = "orange", col.stab = "dark grey", col.exp = "yellow", colZ1 = "red",
+                       name.axis1="Average salinity magellanics
+                       orange:pacific, yellow:atlantic", transparency=20)
+dev.off()
+pdf("Magellanic supopulation chlorophyll overlap.pdf")
+ecospat.plot.niche.dyn(grid.clim.ch.Ma1,grid.clim.ch.Ma2,quant=0, interest=2,title="NicheOverlap", 
+                       col.unf = "orange", col.stab = "dark grey", col.exp = "yellow", colZ1 = "orange",
+                       name.axis1="Average chlorophyll magellanics 
+                       orange:pacific, yellow:atlantic", transparency=20)
+dev.off()
+
+
+histogram(sp1DF$Present.Surface.Temperature.Mean)
+histogram(sp2DF$Present.Surface.Temperature.Mean)
+
+plot(sp1DF)
+
+###plot results spatially
+
+
+geoGrid <- expand.grid(longitude =
+                         seq(-90, -65, length.out = 500),
+                       latitude =
+                         seq(-60, 5, length.out = 500))
+
+earlyGeoGrid <- ecospat.grid.clim.dyn(geoGrid, geoGrid,
+                                      coordinates(sp1Data))
+
+#sp2Data = sp2Data[complete.cases(sp2Data),]
+
+lateGeoGrid <- ecospat.grid.clim.dyn(geoGrid, geoGrid,
+                                     coordinates(sp2Data))
+
+ecospat.plot.niche.dyn(earlyGeoGrid, lateGeoGrid, quant = 0.25)
+
+
+data(wrld_simpl)
+plot(wrld_simpl, add = TRUE)
