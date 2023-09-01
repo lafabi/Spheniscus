@@ -57,4 +57,44 @@ plink --vcf $PATH/filter{banded_penguin_sp}_MAF.vcf --recode 12 --out $PATH/filt
 
 admixture --cv $PATH/filter_{banded_penguin_sp}.ped $K -j8 | tee log${K}.out
 
+for m in {1..10}; do
+    for i in {1..10}; do
+        # Generate random seed
+        s=$RANDOM
+        treemix -i banded_penguin.txt.gz -o banded_penguin.${i}.${m} -global -m ${m} -k 500 -seed ${s}
+    done
+done
+
+tar -zcvf /banded_peguin_dir.tar.gz
+
+https://rfitak.shinyapps.io/OptM/
+
+bed2diffs_v1 --bfile /banded_penguin_pop --nthreads 2 
+runeems_snps --params banded_penguin_pop.ini
+
+#Data Set 3A
+
+samtools mpileup -C50 -uf $REF $PATH/${sample}.realign.bam  | bcftools view -c - | vcfutils.pl vcf2fq -d 15  -D 45 | gzip > $PATH/diploid_${sample}.fq.gz
+fq2psmcfa -q20 $PATH/diploid_${sample}.fq.gz > $PATH/${sample}.psmcfa
+psmc -N25 -t15 -r5 -p "4+25*2+4+6" -o $PATH/${sample}.psmc  $PATH/${sample}.psmcfa
+
+#Data Set 3B
+
+samtools mpileup -C50 -uf $REF $PATH/${sample}.realign.bam  | bcftools view -c - | vcfutils.pl vcf2fq -d 3  -D 14 | gzip > $PATH/diploid_${sample}.fq.gz
+fq2psmcfa -q20 $PATH/diploid_${sample}.fq.gz > $PATH/${sample}.psmcfa
+psmc -N25 -t15 -r5 -p "4+25*2+4+6" -o $PATH/${sample}.psmc  $PATH/${sample}.psmcfa
+
+# Data Set4
+
+vcftools --gzvcf $PATH/filter{banded_penguin_sp}.vcf --maf 0.05  --recode --recode-INFO-all --out $PATH/filter{banded_penguin_sp}_MAF.vcf
+
+plink --vcf $PATH/filter{banded_penguin_sp}_MAF.vcf --recode --out neutral_{banded_penguin_sp} --allow-extra-chr
+
+plink --file {banded_penguin_sp} --indep-pairwise 50 10 0.1 --allow-extra-chr
+
+plink --file {banded_penguin_sp} --extract plink.prune.in
+
+
+
+
 
