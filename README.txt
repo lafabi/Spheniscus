@@ -93,6 +93,42 @@ plink --file {banded_penguin_sp} --indep-pairwise 50 10 0.1 --allow-extra-chr
 
 plink --file {banded_penguin_sp} --extract plink.prune.in
 
+~/angsd/angsd -gl 1 \
+-anc $PATH/GCA_010078495.1_BGI_Enov.V1_genomic.fna \
+-ref $PATH/GCA_010078495.1_BGI_Enov.V1_genomic.fna \
+-bam $PATH/banded_penguin_pop.filelist \
+-rf $PATH/NoCDS.angsd.regions \
+-out $PATH/POP \
+-dosaf 1 \
+-baq 1 \
+-C 50 \
+-minMapQ 30 \
+-minQ 20 \
+-P 20
+
+java -cp stairway_plot_es Stairbuilder SP_blueprint
+bash SP_blueprint.sh
+
+
+bcftools consensus -s ${sample} -f $REF $VCF -o $FASTA/${sample}_consenso.fa
+
+gffread Little_Blue_penguin.gff  -g $REF -x banded_penguin_sp -C  -V -H  -J
+
+phyluce_probe_run_multiple_lastzs_sqlite --db test.sqlite --output $PATH/UCE/test-lastz --scaffoldlist list --genome-base-path . --probefile $PATH/UCE/uce-5k-probes.fasta --cores 8
+
+phyluce_probe_slice_sequence_from_genomes --lastz $PATH/UCE/test-lastz --conf $PATH/UCE/genomes.conf --flank 750 --name-pattern "uce-5k-probes.fasta_v_{}.lastz.clean" --output $PATH/UCE/test_fasta
+
+mafft banded_penguins_sequences.fasta > aligned_sequences.fasta
+
+iqtree -s banded_penguins_UCE_alignment.fasta -m GTR+G4 -bb 1000 -nt 4 -o banded_penguin_UCE_tree.nwk
+
+iqtree -s banded_penguins_CDS_alignment.fasta -m GTR+G4 -bb 1000 -nt 4 -o banded_penguin_UCE_tree.nwk
+
+iqtree -s banded_penguins_exon_alignment.fasta -m GTR+G4 -bb 1000 -nt 4 -o banded_penguin_UCE_tree.nwk
+
+
+
+
 
 
 
