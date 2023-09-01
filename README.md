@@ -2,7 +2,6 @@
 This repository include all scripts used in Spheniscus analyses
 
 
-
 fastqc -o $PATH/ --noextract -t 2 -f fastq $PATH/${sample}*.fastq.gz
 
 java -jar trimmomatic-0.39.jar PE -threads 10 -phred33 $PATH/${sample}*.fastq.gz $PATH/${sample}*.fastq.gz -baseout $PATH/${sample}*_trimmed.fq ILLUMINACLIP:$PATH/TruSeq2OVR-PE.fa:2:30:10 LEADING:3 SLIDINGWINDOW:4:15 MINLEN:25
